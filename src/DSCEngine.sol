@@ -53,6 +53,27 @@ contract DSCEngine is ReentrancyGuard {
 
     address[] private s_collateralTokens;
 
+    //////////////////
+    //// Events ////
+    //////////////////
+
+    event DepositCollateral(
+        address indexed user,
+        address indexed token,
+        uint256 indexed amount
+    );
+
+    event DscMint(address indexed user, uint256 indexed amount);
+
+    event DscBurn(address indexed user, uint256 indexed amount);
+
+    event CollateralRedeemed(
+        address indexed redeemFrom,
+        address indexed redeemTo,
+        address token,
+        uint256 amount
+    );
+
     /////////////////////
     //// Constants ////
     /////////////////////
@@ -75,6 +96,7 @@ contract DSCEngine is ReentrancyGuard {
             s_priceFeed[tokenAddresses[i]] = priceFeedAddresses[i];
             s_collateralTokens.push(tokenAddresses[i]);
         }
+        i_dsc = DecentralizedStableCoin(dsc);
     }
 
     ////////////////////////////
@@ -94,6 +116,12 @@ contract DSCEngine is ReentrancyGuard {
             tokenCollateralAddress
         ] += amountCollateral;
 
+        emit DepositCollateral(
+            msg.sender,
+            tokenCollateralAddress,
+            amountCollateral
+        );
+
         bool success = IERC20(tokenCollateralAddress).transferFrom(
             msg.sender,
             address(this),
@@ -108,16 +136,94 @@ contract DSCEngine is ReentrancyGuard {
     ) public moreThanZero(amountDscToMint) nonReentrant {
         s_DSCMinted[msg.sender] += amountDscToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
-        bool minted = i_dsc.mint(msg.sender, amountDscToMint);
 
+        emit DscMint(msg.sender, amountDscToMint);
+
+        bool minted = i_dsc.mint(msg.sender, amountDscToMint);
         if (!minted) {
             revert DSCEngine__MintFailed();
         }
     }
 
+    function burnDsc(
+        uint256 amountDscToBurn
+    ) public moreThanZero(amountDscToBurn) nonReentrant {
+        _burnDsc(amountDscToBurn, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
+        emit DscBurn(msg.sender, amountDscToBurn);
+    }
+
+    function redeemCollateral(
+        address tokenCollateralAddress,
+        uint256 amountCollateral
+    )
+        public
+        moreThanZero(amountCollateral)
+        isAllowedToken(tokenCollateralAddress)
+        nonReentrant
+    {
+        _redeemCollateral(
+            tokenCollateralAddress,
+            amountCollateral,
+            msg.sender,
+            msg.sender
+        );
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
     /////////////////////////////
     //// Private Functions ////
     /////////////////////////////
+
+    /**
+     * @param amountDscToBurn The amount of DSC to burn (Amount to burn from the user debt)
+     * @param onBehalfOf whow wants to reduce his debt,
+     * Sometimes the payer is different from the user because of its low health factor and the liquidator pays for him to recive 10% of collateral bonus
+     * @param dscFrom Who pays DSC to reduce the debt
+     * @dev This function is used to burn DSC and reduce the debt of a user
+     */
+    function _burnDsc(
+        uint256 amountDscToBurn,
+        address onBehalfOf,
+        address dscFrom
+    ) private {
+        s_DSCMinted[onBehalfOf] -= amountDscToBurn;
+
+        bool success = i_dsc.transferFrom(
+            dscFrom,
+            address(this),
+            amountDscToBurn
+        );
+
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
+
+        i_dsc.burn(amountDscToBurn);
+    }
+
+    function _redeemCollateral(
+        address tokenCollateralAddress,
+        uint256 amountCollateral,
+        address from,
+        address to
+    ) private {
+        s_collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(
+            from,
+            to,
+            tokenCollateralAddress,
+            amountCollateral
+        );
+        bool success = IERC20(tokenCollateralAddress).transfer(
+            to,
+            amountCollateral
+        );
+
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
+    }
 
     function _getUsdValue(
         address token,

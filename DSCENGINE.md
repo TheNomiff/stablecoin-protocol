@@ -262,3 +262,168 @@ Each function exists to enforce one rule:
 
 Together, they form the **core safety system** of the stablecoin protocol.
 They ensure that the stablecoin remains fully collateralized, secure, and reliable.
+
+---
+
+## Events
+
+### What they do  
+Events log important actions of the protocol without changing state.
+
+### Why we need them  
+Mappings store the **current state**, but they do not store history.  
+Events allow:
+- Frontend to track user actions  
+- Analytics and indexing  
+- Transparent protocol activity  
+
+### Role in the system  
+Every major economic action emits an event so deposits, mints, burns, and redeems can be tracked over time.
+
+---
+
+## DepositCollateral (Event)
+
+### What it does  
+Emits an event when a user deposits collateral.
+
+### Why we need it  
+Collateral deposits are the foundation of the protocol.  
+Tracking them is required for:
+- Frontend updates  
+- User deposit history  
+
+### Role in the system  
+Signals that collateral has entered the protocol and the user is now eligible to mint DSC.
+
+---
+
+## DscMint (Event)
+
+### What it does  
+Emits an event when DSC is minted for a user.
+
+### Why we need it  
+Minting creates new stablecoin supply.  
+This is a critical economic action that must be observable.
+
+### Role in the system  
+Helps track:
+- User debt creation  
+- Total supply changes  
+- Mint history for analytics and UI
+
+---
+
+## DscBurn (Event)
+
+### What it does  
+Emits an event when DSC is burned.
+
+### Why we need it  
+Burning reduces user debt and total supply.  
+It represents repayment.
+
+### Role in the system  
+Tracks:
+- Debt reduction  
+- Supply contraction  
+- Repayment history  
+
+---
+
+## CollateralRedeemed (Event)
+
+### What it does  
+Emits an event when collateral is redeemed or seized.
+
+### Why we need it  
+Collateral movement is a sensitive action that affects system safety.
+
+### Role in the system  
+Tracks:
+- Normal withdrawals  
+- Liquidation-based collateral transfers  
+- Who lost collateral and who received it  
+
+---
+
+## burnDsc()
+
+### What it does  
+Allows a user to burn DSC and reduce their debt.
+
+### Why we need it  
+Users must be able to repay debt to:
+- Improve health factor  
+- Avoid liquidation  
+- Redeem collateral  
+
+### Role in the system  
+This function:
+- Calls internal burn logic  
+- Reduces user debt  
+- Rechecks protocol safety  
+- Emits a burn event  
+
+---
+
+## redeemCollateral()
+
+### What it does  
+Allows a user to withdraw previously deposited collateral.
+
+### Why we need it  
+Collateral should be withdrawable once debt is reduced and the user is safe.
+
+### Role in the system  
+This function:
+- Redeems collateral using internal logic  
+- Checks health factor before transfer  
+- Ensures system remains over-collateralized  
+
+---
+
+## _burnDsc() (Internal)
+
+### What it does  
+Burns DSC tokens and reduces a user's debt.
+
+### Why we need it  
+Burn logic is reused in:
+- Normal repayment  
+- Liquidation  
+
+Separating this logic avoids duplication and improves safety.
+
+### Role in the system  
+This function:
+- Reduces debt for `onBehalfOf`  
+- Transfers DSC from `dscFrom`  
+- Burns DSC permanently  
+
+It allows the payer and debtor to be different addresses.
+
+---
+
+## _redeemCollateral() (Internal)
+
+### What it does  
+Handles collateral accounting and token transfer.
+
+### Why we need it  
+Collateral redemption happens in:
+- Normal withdrawal  
+- Liquidation  
+
+A single internal function keeps behavior consistent.
+
+### Role in the system  
+This function:
+- Reduces collateral balance of `from`  
+- Transfers tokens to `to`  
+- Emits a collateral redemption event  
+
+It cleanly separates accounting from token movement.
+
+---
